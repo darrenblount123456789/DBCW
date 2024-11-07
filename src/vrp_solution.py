@@ -11,10 +11,46 @@ class VRPSolution:
     # solution - solution in final form : list of the lists of vehicles paths. Used to
     # create VRPSolution other way than from QUBO solution. 
     # It is needed to provide sample or solution parameter.
-    def __init__(self, problem, solution = None):
+    def __init__(self, problem, sample = None, vehicle_limits = None, solution = None, step = 0):
         self.problem = problem
-        self.solution = solution
+        self.step = step
+        
+        if solution != None:
+            self.solution = solution
+        else:
+            if vehicle_limits == None:
+                dests = len(self.problem.dests)
+                vehicles = len(self.problem.capacities)
+                vehicle_limits = [dests for _ in range(vehicles)]
 
+            result = list()
+            vehicle_result = list()
+            step = 0
+            vehicle = 0
+
+            # Decoding solution from qubo sample.
+            for (s, dest) in sample:
+                if sample[(s, dest)] == 1:
+                    if dest != 0:
+                        vehicle_result.append(dest)
+                    step += 1
+                    if vehicle_limits[vehicle] == step:
+                        result.append(vehicle_result)
+                        step = 0
+                        vehicle += 1
+                        vehicle_result = list()
+                        if len(vehicle_limits) <= vehicle:
+                            break
+
+            # Adding first and last magazine.
+            for l in result:
+                if len(l) != 0:
+                    if problem.first_source:
+                        l.insert(0, problem.in_nearest_sources[l[0]])
+                    if problem.last_source:
+                        l.append(problem.out_nearest_sources[l[len(l) - 1]])
+
+            self.solution = result
 
     # Checks if solution is correct.
     def check(self):
@@ -72,6 +108,52 @@ class VRPSolution:
             result.append(weight)
 
         return result
+    
+    # Returns total time for every vehicle route.
+    def total_time(self):
+        costs = self.problem.costs
+        timeIntervals = self.problem.time_intervals
+        services = self.problem.services
+        result = list()  # List to store total time for each vehicle
+
+        for vehicle_dests in self.solution:
+            totalTime = 0
+            # vehicle_dests = [vehicle_dests[0]] + sorted(vehicle_dests[1:-1], key=lambda node: timeIntervals[str(node)][0]) + [vehicle_dests[-1]]
+            # vehicle_dests = [0] + vehicle_dests + [0]
+            for i in range(len(vehicle_dests) - 1):
+                prevNode = vehicle_dests[i]
+                currentNode = vehicle_dests[i + 1]
+                travel_time = costs[prevNode][currentNode]
+                readyTime = timeIntervals[str(currentNode)][0]
+                dueTime = timeIntervals[str(currentNode)][1]
+                
+                
+                # Update totalTime with travel time from previous node to current node
+                totalTime += travel_time
+
+
+                
+                # Check if total time is outside the time window
+                if totalTime <= readyTime:
+                    totalTime = readyTime  # Adjust for early arrival, wait for ready time
+                elif totalTime > dueTime:
+                    print(f'Time violated at node {currentNode}')
+                    return True  # Time window violated
+                
+                    
+                
+                # Add service time for all locations except the depot (node 0)
+                if currentNode != 0:
+                    totalTime += services[0]
+            
+            result.append(totalTime)
+        return result
+
+
+       
+        
+        
+       
 
     # Prints description of solution.
     def description(self):

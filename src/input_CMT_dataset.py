@@ -34,8 +34,9 @@ def parse_file_time(file_path):
 
             if current_section == "data_section" and line and not line.startswith("NUMBER") and not line.startswith("CUST NO."):
                 try:
-                    cust_no, x_coord, y_coord, demand, ready_time, due_date, service = line.split(maxsplit=6)
+                    cust_no, x_coord, y_coord, demand, ready_time, due_date, service = line.split(maxsplit=7)
                     data["service"] = int(service)
+                    cust_no = str(int(cust_no))
                     data["node_coords"][cust_no] = (float(x_coord), float(y_coord))
                     data["demands"][cust_no] = int(demand)
                     data["depot"] = [0.0]
@@ -110,9 +111,12 @@ def parse_file(file_path):
 
 
 
-def plot_all_solutions(g, solutions):
+def plot_all_solutions(g, solutions, t):
+    """Plots all solutions on a single graph, with nodes and paths."""
+
     node_positions = nx.get_node_attributes(g, "pos")
-    plt.figure(figsize=(16, 8))
+
+    plt.figure(figsize=(8, 6))  
 
     for i, node in enumerate(g.nodes):
         node_pos = node_positions[node]
@@ -139,23 +143,22 @@ def plot_all_solutions(g, solutions):
                 bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.5),
             )
 
-    cmap = plt.get_cmap("tab20")
-    colors = cmap(np.linspace(0, 1, cmap.N))
-
+    colors = plt.cm.get_cmap("tab20").colors  
     for i, solution in enumerate(solutions):
         path_x, path_y = [], []
-        path_x.append(node_positions[next(iter(g.nodes))][0])
+        path_x.append(node_positions[next(iter(g.nodes))][0]) 
         path_y.append(node_positions[next(iter(g.nodes))][1])
-        if solution:
-            for node_index in solution:
-                node = list(g.nodes)[node_index]
-                path_x.append(node_positions[node][0])
-                path_y.append(node_positions[node][1])
-            plt.plot(path_x, path_y, color=colors[i % len(colors)], label=f"Route {i+1}")
+        for node_index in solution:
+            node = list(g.nodes)[node_index]
+            path_x.append(node_positions[node][0])
+            path_y.append(node_positions[node][1])
+        plt.plot(path_x, path_y, color=colors[i % len(colors)], label=f"Solution {i+1}")
 
     plt.legend(loc="best")
     plt.axis("off")
-    plt.show()
+    plt.show()  # Display the complete graph
+    print(t)
+    plt.savefig('outputs/images/' + t + '.png')
 
 
 def create_vrp_problem(dataset_file):
@@ -234,20 +237,24 @@ def create_vrp_problem_time(dataset_file):
 
     costs = np.round(costs, 1)
     print("Sources:\n", sources)
-    print("Cost Matrix:\n", costs[0][75])
+    print("Cost Matrix:\n", costs)
     print("Capacities:\n", capacities)
     print("Destination nodes:\n", dests)
     print("Weights:\n", weights)
     print("Services:\n", services)
     print("Time Intervals:\n", time_intervals)
+    # print("TIME TEST: ", time_intervals['-1'][0])
+    # print(f'cost0,1 {costs[0][1]}, cost1,2 {costs[1][2]}, cost2,4 {costs[2][4]}, cost4,3 {costs[4][3]}, cost3,5 {costs[3][5]}, cost5,0 {costs[5][0]}, ')
+
+
 
     return VRPProblem(sources, costs, capacities, dests, weights, time_intervals, services, node_coords), g
 
 # # Example usage:
-problem, graph = create_vrp_problem(r"C:\Users\darre\Desktop\Quantum Research\DBCW\D-Wave-VRP-master_Time\D-Wave-VRP-master\tests\CMT\CMT1.vrp")
-print(problem)
-problem, graph = create_vrp_problem_time(r"C:\Users\darre\Desktop\Quantum Research\DBCW\D-Wave-VRP-master_Time\D-Wave-VRP-master\tests\CMT\C101.vrp")
-print(problem)
+# problem, graph = create_vrp_problem(r"C:\Users\darre\Desktop\Quantum Research\DBCW\D-Wave-VRP-master_Time\D-Wave-VRP-master\tests\CMT\CMT1.vrp")
+# print(problem)
+# problem, graph = create_vrp_problem_time(r"C:\Users\darre\Desktop\Quantum Research\DBCW\D-Wave-VRP-master_Time\D-Wave-VRP-master\tests\CMT\C101.vrp")
+# print(problem)
 
 
 
