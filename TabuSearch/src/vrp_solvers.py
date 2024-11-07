@@ -578,29 +578,21 @@ class TabuSolver(VRPSolver):
                                             new_neighbor = copy.deepcopy(clusters)
                                             new_neighbor[i].remove(d)
                                             new_neighbor[j].append(d)  # Append to the end for simplicity
-                                            # new_neighbor[j] = clusters[j][:k] + [d] + clusters[j][k:]
+                                            #new_neighbor[j] = clusters[j][:k] + [d] + clusters[j][k:]
                                             n = Neighbor(new_neighbor, d, i)
-                                            lastSolution = ("6 j i route, cap, time",new_neighbor[j],self.calculate_route_cost(new_neighbor[j], costs, sources) > capacities[j], self.check_time(new_neighbor[j]),new_neighbor[i],self.calculate_route_cost(new_neighbor[i], costs, sources) > capacities[j], self.check_time(new_neighbor[i]))
+                                            lastSolution = ("6 j i route, time",new_neighbor[j], self.check_time(new_neighbor[j]),new_neighbor[i], self.check_time(new_neighbor[i]))
                                             inf_neighbors.append(n)
 
                                     # If a valid insertion point is found, create the neighbor solution
                                     if best_found_spot is not None:
                                         new_neighbor = copy.deepcopy(clusters)
                                         new_neighbor[i].remove(d)
-                                        if self.check_time(new_neighbor[i]): #time was violated
-                                            #new_neighbor[j] = clusters[j][:k] + [d] + clusters[j][k:]
-                                            new_neighbor[j].append(d)
-                                            n = Neighbor(new_neighbor, d, i)
-                                            lastSolution = ("7 j i route, cap, time",new_neighbor[j],self.calculate_route_cost(new_neighbor[j], costs, sources) > capacities[j], self.check_time(new_neighbor[j]),new_neighbor[i],self.calculate_route_cost(new_neighbor[i], costs, sources) > capacities[j], self.check_time(new_neighbor[i]))
-                                            inf_neighbors.append(n)
-                                        else:
-                                            new_neighbor[j] = new_neighbor[j][:best_found_spot] + [d] + new_neighbor[j][best_found_spot:]
-                                            n = Neighbor(new_neighbor, d, i)  # Assuming Neighbor class exists
-                                            # print(f"Last Solution3: {new_neighbor[j]}")
-                                            # print(f'Capacity ViolatedD: {self.calculate_route_cost(new_neighbor[j], costs, sources) <= capacities[j]}')
-                                            # print(f'Time ViolatedD: {self.check_time(new_neighbor[j])}')
-                                            lastSolution = ("3 j i route, cap, time",new_neighbor[j],self.calculate_route_cost(new_neighbor[j], costs, sources) > capacities[j], self.check_time(new_neighbor[j]),new_neighbor[i],self.calculate_route_cost(new_neighbor[i], costs, sources) > capacities[j], self.check_time(new_neighbor[i]))
-                                            neighbors.append(n)
+                                        new_neighbor[j] = clusters[j][:k] + [d] + clusters[j][k:]
+                                        #new_neighbor[j].append(d)
+                                        n = Neighbor(new_neighbor, d, i)
+                                        lastSolution = ("7 j i route, cap, time",new_neighbor[j], self.check_time(new_neighbor[j]),new_neighbor[i], self.check_time(new_neighbor[i]))
+                                        neighbors.append(n)
+                                    
                                     # else:
                                     #     # Time constraint violated, add to inf_neighbors
                                     #     new_neighbor = copy.deepcopy(clusters)
@@ -611,10 +603,10 @@ class TabuSolver(VRPSolver):
                                 else:
                                     # Capacity constraint violated, add to inf_neighbors
                                     new_neighbor = copy.deepcopy(clusters)
-                                    new_neighbor[i].remove(d)
+                                    new_neighbor[i].remove(d)                                        
                                     new_neighbor[j].append(d)  # Append to the end for simplicity
                                     n = Neighbor(new_neighbor, d, i)
-                                    lastSolution = ("4 j i route, cap, time",new_neighbor[j],self.calculate_route_cost(new_neighbor[j], costs, sources) > capacities[j], self.check_time(new_neighbor[j]),new_neighbor[i],self.calculate_route_cost(new_neighbor[i], costs, sources) > capacities[j], self.check_time(new_neighbor[i]))                                    
+                                    lastSolution = ("4 j i route, time",new_neighbor[j], self.check_time(new_neighbor[j]),new_neighbor[i], self.check_time(new_neighbor[i]))                                    
                                     inf_neighbors.append(n)
 
 
@@ -633,17 +625,17 @@ class TabuSolver(VRPSolver):
                 testVar = True             
                 for n in neighbors:
                     cost = self.calculate_neighbor_cost(problem, n.clusters)
-                    count = 0
-                    tempCluster = []
-                    for i, cluster in enumerate(n.clusters):
-                        if self.check_time(cluster):
-                            count=count+1
-                            tempCluster.append(cluster)
+                    # count = 0
+                    # tempCluster = []
+                    # for i, cluster in enumerate(n.clusters):
+                    #     if self.check_time(cluster):
+                    #         count=count+1
+                    #         tempCluster.append(cluster)
 
-                    if (count != 0):
-                        print("INFEASIBLE DIDNT UPDATE COST")
-                        print(tempCluster)
-                        print(lastSolution)
+                    # if (count != 0):
+                    #     print("FEASIBLE DIDNT UPDATE COST")
+                    #     print(tempCluster)
+                    #     print(lastSolution)
 
                     if cost < selected_neighbor_cost:
                         #keep track of overall best neighbor
@@ -663,9 +655,9 @@ class TabuSolver(VRPSolver):
                             selected_neighbor = n
                             selected_neighbor_cost = cost
 
-                if (testVar):
-                    print("DIDNT Update COST1")
-                    print(lastSolution)
+                # if (testVar):
+                #     print("DIDNT Update COST1")
+                #     print(lastSolution)
 
 
                 #find best infeasible candidate                                         
@@ -716,7 +708,7 @@ class TabuSolver(VRPSolver):
                             best_amount = current_infeasible_amount
                     
                 # if not testVar:
-                #     print("asdasdadasdadasdasdasdasdsa")
+                #     print("Didnt update Infeasible Cost")
                 #     print(lastSolution)
 
                 #find best infeasible candidate                            
