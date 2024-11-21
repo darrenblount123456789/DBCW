@@ -383,6 +383,38 @@ class TabuSolver(VRPSolver):
            # print(f'currentTime: {totalTime}')
         
         return False  # All time windows respected
+    
+    def totalTime(self, route):
+        totalTime = 0
+        costs = self.problem.costs
+        timeIntervals = self.problem.time_intervals
+        services = self.problem.services
+        # sorted_route = sorted(route, key=lambda node: (timeIntervals[str(node)][0]))
+        route = [0] + route + [0]  # Start and end at the depot (node 0)
+        
+        
+        for i in range(len(route) - 1):
+            prevNode = route[i]
+            currentNode = route[i + 1]
+            travel_time = costs[prevNode][currentNode]
+            readyTime = timeIntervals[str(currentNode)][0]
+            dueTime = timeIntervals[str(currentNode)][1]
+                        
+            # Update totalTime with travel time from previous node to current node
+            totalTime += travel_time
+            
+            # Check if total time is outside the time window
+            if totalTime <= readyTime:
+                totalTime = readyTime  # Adjust for early arrival, wait for ready time
+            
+            # Add service time for all locations except the depot (node 0)
+            if currentNode != 0:
+                totalTime += services[0]
+            
+           # print(f'currentTime: {totalTime}')
+        
+        return totalTime  # All time windows respected
+    
 
     def is_tabu(self, tabu, n):
         is_tabu = False                            
@@ -419,8 +451,6 @@ class TabuSolver(VRPSolver):
         services = problem.services
         vehicles = len(problem.capacities)
         lastSolution = ()
-        goodArray = []
-        badArray = []
 
         # 0. Create initial neighborhood for each destination
         # The initial neighborhood is 2 times the number of vehicles destinations
@@ -434,6 +464,8 @@ class TabuSolver(VRPSolver):
         solver = ClarkWright(problem)
         solution = solver.solve()
         clusters = [arr[1:-1] for arr in solution.solution]
+
+        
 
         #solver = SolutionPartitioningSolver(problem)
         #solution = solver.solve()
@@ -463,6 +495,8 @@ class TabuSolver(VRPSolver):
         ready_to_stop = False           #set this to True to stop the tabu search
         largest_change = 0              #holds the largest improvment in solution cost for a single move
         frequency = defaultdict(int)    #not used at this time
+        DEPOT_RETURN_TIME = time_intervals['0'][1]
+
 
         neighborhood = [[] for _ in range(len(weights))]
         for d in dests:
@@ -501,16 +535,18 @@ class TabuSolver(VRPSolver):
                                 new_neighbor[i][idxd] = swap2
                                 new_neighbor[i][idxe] = swap1
 
-                                if vehicle_weights[i] <= capacities[i]:
-                                    if not self.check_time(new_neighbor[i]): #respects time windows
-                                        lastSolution = (" 1 route, cap, time",new_neighbor[i],self.calculate_route_cost(new_neighbor[i], costs, sources) > capacities[i], self.check_time(new_neighbor[i]))
-                                        # print(f"Last Solution1: {new_neighbor[i]}")
-                                        # print(f'Capacity ViolatedD: {self.calculate_route_cost(new_neighbor[i], costs, sources) <= capacities[i]}')
-                                        # print(f'Time ViolatedD: {self.check_time(new_neighbor[i])}')
-                                        neighbors.append(n)
-                                    else:
-                                        inf_neighbors.append(n)
+                                if vehicle_weights[i] <= capacities[i] and not self.check_time(new_neighbor[i]):
+                                    # if not self.check_time(new_neighbor[i]): #respects time windows
+                                    #     lastSolution = (" 1 route, cap, time",new_neighbor[i],self.calculate_route_cost(new_neighbor[i], costs, sources) > capacities[i], self.check_time(new_neighbor[i]))
+                                    #     # print(f"Last Solution1: {new_neighbor[i]}")
+                                    #     # print(f'Capacity ViolatedD: {self.calculate_route_cost(new_neighbor[i], costs, sources) <= capacities[i]}')
+                                    #     # print(f'Time ViolatedD: {self.check_time(new_neighbor[i])}')
+                                    neighbors.append(n)
+                                # else:
+                                    lastSolution = "GREEN"
+                                        # inf_neighbors.append(n)
                                 else:
+                                    lastSolution = "REDDDD"
                                     inf_neighbors.append(n)
 
             # 9. 1,1
@@ -529,12 +565,14 @@ class TabuSolver(VRPSolver):
                                     continue
                                 weight1 = vehicle_weights[j] - self.problem.weights[swap2] + self.problem.weights[swap1]
                                 weight2 = vehicle_weights[i] - self.problem.weights[swap1] + self.problem.weights[swap2]
-                                if weight1 <= capacities[j] and weight2 <= capacities[i]:
-                                    new_neighbor = copy.deepcopy(clusters) 
-                                    new_neighbor[j][idx_j], new_neighbor[i][idx_i] = swap1, swap2
-                                    new_neigh_j_time_check, new_neigh_i_time_check = self.check_time(new_neighbor[j]), self.check_time(new_neighbor[i])
-                                    if not new_neigh_j_time_check and not new_neigh_i_time_check: #if both are false, if statement will be true 
-                                        neighbors.append(Neighbor(new_neighbor, swap1, i, swap2, j)) #swap meets capacity and time constraints
+                                new_neighbor = copy.deepcopy(clusters) 
+                                new_neighbor[j][idx_j], new_neighbor[i][idx_i] = swap1, swap2
+                                new_neigh_j_time_check, new_neigh_i_time_check = self.check_time(new_neighbor[j]), self.check_time(new_neighbor[i])
+                                if weight1 <= capacities[j] and weight2 <= capacities[i] and not new_neigh_j_time_check and not new_neigh_i_time_check:
+                                    
+                                    # if not new_neigh_j_time_check and not new_neigh_i_time_check: #if both are false, if statement will be true 
+                                    neighbors.append(Neighbor(new_neighbor, swap1, i, swap2, j)) #swap meets capacity and time constraints
+
                                         
                                         # print(f"Last Solution2: {new_neighbor[j]}")
                                         # print(f'Capacity ViolatedD: {self.calculate_route_cost(new_neighbor[j], costs, sources) <= capacities[j]}')
@@ -544,70 +582,70 @@ class TabuSolver(VRPSolver):
                                         # print(f'Capacity ViolatedD: {self.calculate_route_cost(new_neighbor[i], costs, sources) <= capacities[i]}')
                                         # print(f'Time ViolatedD: {self.check_time(new_neighbor[i])}')
 
-                                        lastSolution = ("2 j,i, route, cap, time", new_neighbor[j],self.calculate_route_cost(new_neighbor[j], costs, sources) > capacities[j], self.check_time(new_neighbor[j]), new_neighbor[i],self.calculate_route_cost(new_neighbor[i], costs, sources) <= capacities[i], self.check_time(new_neighbor[i]))
+                                    lastSolution = ("2 j,i, route, cap, time", new_neighbor[j], self.check_time(new_neighbor[j]), new_neighbor[i], self.check_time(new_neighbor[i]))
                                         
-                                    else:
-                                        inf_neighbors.append(Neighbor(new_neighbor, swap1, i, swap2, j))
+                                    # else:
+                                    #     inf_neighbors.append(Neighbor(new_neighbor, swap1, i, swap2, j))
                                 else:
-                                    new_neighbor = copy.deepcopy(clusters) 
-                                    new_neighbor[j][idx_j], new_neighbor[i][idx_i] = swap1, swap2
+                                    # new_neighbor = copy.deepcopy(clusters) 
+                                    # new_neighbor[j][idx_j], new_neighbor[i][idx_i] = swap1, swap2
+                                    lastSolution = ("YELLOW")
+
                                     inf_neighbors.append(Neighbor(new_neighbor, swap1, i, swap2, j)) 
 
 
             # 10. 1,0
-            if False == False:                                                
+            # Setting a flag to trigger this section
+            if False == False:                                                 
                 for i in range(vehicles):
-                    for d in clusters[i]:
+                    for d in clusters[i]:  # Iterate through each delivery in vehicle i's cluster
+                       
                         for j in range(vehicles):
+                            # Skip if attempting to move within the same cluster or to a cluster containing `d`
                             if i != j and d not in clusters[j] and set(neighborhood[d]).intersection(clusters[j]):
-                                # Found a potential move: delivery 'd' from cluster 'i' to 'j'
-                                # Check capacity constraint first for efficiency
+                                # Proceed only if the capacity constraint would not be violated in cluster `j`
                                 if vehicle_weights[j] + self.problem.weights[d] <= capacities[j]:
-                                    # temp_route = clusters[j] + [d]
-                                    # if not self.check_time(temp_route):
-                                    # Calculate the cost of inserting 'd' into all possible positions in cluster 'j'
                                     best_found_cost, best_found_spot = float('inf'), None
-                                    for k in range(len(clusters[j]) + 1): #WHY IS IT PLUS 1
+                                    
+                                    # Try to insert `d` into every position in cluster `j`
+                                    for k in range(len(clusters[j]) + 1):
+                                        # Create a potential new route with `d` inserted at position `k`
                                         new_route = clusters[j][:k] + [d] + clusters[j][k:]
-                                        if not self.check_time(new_route): #make sure time is still constrained
+                                        
+                                        # Check time constraints for the new route
+                                        if not self.check_time(new_route):  # If time is valid
                                             cost = self.calculate_route_cost(new_route, costs, sources)
                                             if cost < best_found_cost:
                                                 best_found_cost, best_found_spot = cost, k
                                         else:
-                                            # Time constraint violated, add to inf_neighbors
+                                            # print(f"Time constraint violated for inserting {d} into position {k} of cluster {j}")
+                                            # Time constraint violated; add to infeasible neighbors
                                             new_neighbor = copy.deepcopy(clusters)
                                             new_neighbor[i].remove(d)
-                                            new_neighbor[j].append(d)  # Append to the end for simplicity
-                                            #new_neighbor[j] = clusters[j][:k] + [d] + clusters[j][k:]
+                                            new_neighbor[j] = clusters[j][:k] + [d] + clusters[j][k:]
                                             n = Neighbor(new_neighbor, d, i)
-                                            lastSolution = ("6 j i route, time",new_neighbor[j], self.check_time(new_neighbor[j]),new_neighbor[i], self.check_time(new_neighbor[i]))
+                                            lastSolution = ("6 j i route, time", new_neighbor[j], self.check_time(new_neighbor[j]), new_neighbor[i], self.check_time(new_neighbor[i]))
                                             inf_neighbors.append(n)
 
-                                    # If a valid insertion point is found, create the neighbor solution
+                                    # If a feasible insertion point was found, add the neighbor
                                     if best_found_spot is not None:
                                         new_neighbor = copy.deepcopy(clusters)
                                         new_neighbor[i].remove(d)
-                                        new_neighbor[j] = clusters[j][:k] + [d] + clusters[j][k:]
-                                        #new_neighbor[j].append(d)
+                                        new_neighbor[j] = clusters[j][:best_found_spot] + [d] + clusters[j][best_found_spot:]
                                         n = Neighbor(new_neighbor, d, i)
-                                        lastSolution = ("7 j i route, cap, time",new_neighbor[j], self.check_time(new_neighbor[j]),new_neighbor[i], self.check_time(new_neighbor[i]))
+                                        lastSolution = ("7 j i route, cap, time", new_neighbor[j], self.check_time(new_neighbor[j]), new_neighbor[i], self.check_time(new_neighbor[i]))
                                         neighbors.append(n)
                                     
-                                    # else:
-                                    #     # Time constraint violated, add to inf_neighbors
-                                    #     new_neighbor = copy.deepcopy(clusters)
-                                    #     new_neighbor[i].remove(d)
-                                    #     new_neighbor[j].append(d)  # Append to the end for simplicity
-                                    #     n = Neighbor(new_neighbor, d, i)
-                                    #     inf_neighbors.append(n)
                                 else:
-                                    # Capacity constraint violated, add to inf_neighbors
+                                    # Capacity constraint violated; add to infeasible neighbors
+                                    # print(f"Capacity constraint violated for inserting {d} into cluster {j}")
                                     new_neighbor = copy.deepcopy(clusters)
-                                    new_neighbor[i].remove(d)                                        
+                                    new_neighbor[i].remove(d)
                                     new_neighbor[j].append(d)  # Append to the end for simplicity
                                     n = Neighbor(new_neighbor, d, i)
-                                    lastSolution = ("4 j i route, time",new_neighbor[j], self.check_time(new_neighbor[j]),new_neighbor[i], self.check_time(new_neighbor[i]))                                    
+                                    lastSolution = ("4 j i route, time", new_neighbor[j], self.check_time(new_neighbor[j]), new_neighbor[i], self.check_time(new_neighbor[i]))                                    
                                     inf_neighbors.append(n)
+
 
 
             current_best_neighbor = []          #holds the best neighbor found by the local search (might be tabu)
@@ -619,80 +657,70 @@ class TabuSolver(VRPSolver):
             selected_inf_neighbor_cost = self.max_dist
 
             # 11. Strategic Oscillation (12, 13)
-            # 12. previous solution was feasible
+            # 12. Previous solution was feasible
+            # if feasible == True and len(inf_neighbors) != 0 and len(neighbors) != 0:
             if feasible == True:
-                #find best feasible candidate
-                testVar = True             
+                testVar = True
                 for n in neighbors:
                     cost = self.calculate_neighbor_cost(problem, n.clusters)
-                    # count = 0
-                    # tempCluster = []
-                    # for i, cluster in enumerate(n.clusters):
-                    #     if self.check_time(cluster):
-                    #         count=count+1
-                    #         tempCluster.append(cluster)
-
-                    # if (count != 0):
-                    #     print("FEASIBLE DIDNT UPDATE COST")
-                    #     print(tempCluster)
-                    #     print(lastSolution)
-
+                    
+                    # Only consider updating if the cost is actually better than current best
                     if cost < selected_neighbor_cost:
-                        #keep track of overall best neighbor
-
+                        # Track the best neighbor overall
                         if cost < current_best_cost:
                             current_best_neighbor = n
-                            # print(f"CURRENT BEST1 {cost}")
                             testVar = False
                             current_best_cost = cost
                             current_best_move = n.type
-                      
-                        
-
-                        #check if candidate is tabu
-                        if self.is_tabu(tabu, n) is False:
-                            #keep track of best non-tabu neighbor
+                    
+                        # Check if this neighbor is non-tabu
+                        if not self.is_tabu(tabu, n):
                             selected_neighbor = n
                             selected_neighbor_cost = cost
 
-                # if (testVar):
-                #     print("DIDNT Update COST1")
-                #     print(lastSolution)
+                # Log when no feasible candidate was found
+                # if testVar:
+                #     print(f"Neightors {len(neighbors)} Ing Neigh {len(inf_neighbors)}")
+                #     print("Warning: No feasible candidate found; potential constraints issue.")
+                #     print("Last Solution details:", lastSolution)
 
-
-                #find best infeasible candidate                                         
+                # Process infeasible candidates if no feasible solutions were found
                 for n in inf_neighbors:
                     cost = self.calculate_neighbor_cost(problem, n.clusters)
-                    if cost < selected_inf_neighbor_cost and self.is_tabu(tabu, n) is False:
-                        #keep track of best non-tabu neighbor
+                    if cost < selected_inf_neighbor_cost and not self.is_tabu(tabu, n):
                         selected_inf_neighbor = n
                         selected_inf_neighbor_cost = cost
 
-                #pick the best neighbor
-                #if selected_neighbor_cost > previous_cost:
+                # Choose the best between feasible and infeasible, if needed
                 if selected_inf_neighbor_cost < selected_neighbor_cost:
-                    selected_neighbor = selected_inf_neighbor 
-                    selected_neighbor_cost = selected_inf_neighbor_cost 
+                    selected_neighbor = selected_inf_neighbor
+                    selected_neighbor_cost = selected_inf_neighbor_cost
 
-            # 13. previous solution was NOT feasible                
+            # 13. If previous solution was NOT feasible
+            # elif feasible == False and len(inf_neighbors) != 0 and len(neighbors) != 0:
             else:
-                #find best feasible candidate
                 current_best_cost = self.max_dist
                 best_amount = sum(capacities)
                 best_inf_amount = sum(capacities)
                 testVar = True
+
+                # Check feasible candidates
                 for n in neighbors:
                     current_infeasible_amount = 0
                     current_weights = list()
+                    current_times = list()
+                    
+                    # Calculate infeasibility due to weight
                     for i in range(vehicles):
                         current_weights.append(0)
+                        current_times.append(0)
                         for dest in n.clusters[i]:
                             current_weights[i] += self.problem.weights[dest]
-                        if current_weights[i] > capacities[i]:
-                            current_infeasible_amount += current_weights[i] - capacities[i]
+                        current_times[i] = self.totalTime(n.clusters[i])
+                        if current_weights[i] + current_times[i] > capacities[i] + DEPOT_RETURN_TIME:
+                            current_infeasible_amount += current_weights[i] + current_times[i] - capacities[i] - DEPOT_RETURN_TIME
 
-                   
-
+                    # Consider only if it reduces infeasibility or is feasible
                     if current_infeasible_amount <= best_amount:
                         cost = self.calculate_neighbor_cost(problem, n.clusters)
                         if cost < current_best_cost:
@@ -700,12 +728,17 @@ class TabuSolver(VRPSolver):
                             current_best_neighbor = n
                             current_best_cost = cost
                             current_best_move = n.type
-                        #check if candidate is tabu
-                        if self.is_tabu(tabu, n) is False:                    
-                            #keep track of best non-tabu neighbor
+                        # Check if non-tabu and update
+                        if not self.is_tabu(tabu, n):
                             selected_neighbor = n
                             selected_neighbor_cost = cost
                             best_amount = current_infeasible_amount
+
+                # Additional logging if no improvement
+                # if testVar:
+                #     print(f"Neightors {len(neighbors)} Ing Neigh {len(inf_neighbors)}")
+                #     print("No feasible solution found; using fallback. Last Solution:", lastSolution)
+
                     
                 # if not testVar:
                 #     print("Didnt update Infeasible Cost")
@@ -715,12 +748,15 @@ class TabuSolver(VRPSolver):
                 for n in inf_neighbors:
                     inf_infeasible_amount = 0
                     current_weights = list()
+                    current_times = list()
                     for i in range(vehicles):
                         current_weights.append(0)
+                        current_times.append(0)
                         for dest in n.clusters[i]:
                             current_weights[i] += self.problem.weights[dest]
-                        if current_weights[i] > capacities[i]:
-                            inf_infeasible_amount += current_weights[i] - capacities[i]
+                        current_times[i] = self.totalTime(n.clusters[i])
+                        if current_weights[i] + current_times[i] > capacities[i] + DEPOT_RETURN_TIME:
+                            inf_infeasible_amount += current_weights[i] + current_times[i] - capacities[i] - DEPOT_RETURN_TIME
                     if inf_infeasible_amount <= best_inf_amount and self.is_tabu(tabu, n) is False:                
                         #keep track of best non-tabu neighbor
                         selected_inf_neighbor = n
@@ -742,11 +778,9 @@ class TabuSolver(VRPSolver):
                     vehicle_weights.append(0)
                     for dest in clusters[i]:
                         vehicle_weights[i] += self.problem.weights[dest]
-                    if vehicle_weights[i] > capacities[i]:
-                        is_feasible_route = self.check_time(clusters[i])
-                        if is_feasible_route: #infeasible time
-                            current_best_feasible = False
-                            break
+                    if vehicle_weights[i] > capacities[i] or self.check_time(clusters[i]): #if capacity is violated or time is violated
+                        current_best_feasible = False
+                        break
                 #feasible, so lets use it
                 if current_best_feasible == True:
                     if best_cost - current_best_cost > largest_change:
@@ -777,12 +811,11 @@ class TabuSolver(VRPSolver):
             # 16. Toggle Diversification and do Intensification
             # threshold is reached so we toggle on diversification
             if counter - counter_of_last_threshold == last_threshold:
-                if current_best_cost == self.max_dist:
-                    badArray.append([0]+lastSolution[1]+[0])
-                else:
-                    goodArray.append([0]+lastSolution[1]+[0])
-                
-                print(lastSolution)   
+                # if current_best_cost == self.max_dist:
+                    
+
+                print(lastSolution)                 
+                print(f"Neighbors {len(neighbors)} Inf Neighbors {len(inf_neighbors)}")
                 print('counter', counter, 'cbc', current_best_cost, 'snc', selected_neighbor_cost, 'move', current_best_move, "feasible", feasible)
                 if intensification_counter == 2: #diversification
                     print('diversification on', counter)
@@ -825,7 +858,7 @@ class TabuSolver(VRPSolver):
             #                     found = True
             #             if found == False:
             #                 new_problem = VRPProblem(sources, costs, [capacities[0]], cluster, weights, time_intervals, services, first_source = True, last_source = True)
-            #                 solver = FullQuboSolver(new_problem)
+                            solver = FullQuboSolver(new_problem)
             #                 print('0 =', cluster)
             #                 route = solver.solve(only_one_const, order_const, solver_type = solver_type).solution[0]                                
             #                 del route[0]
@@ -1219,23 +1252,13 @@ class ClarkWright(VRPSolver):
         for i in range(len(routes)):
             routes[i] = [0] + sorted(routes[i], key=lambda node: self.problem.time_intervals[str(node)][0]) + [0]
 
-        # routes = [[0,2, 1, 98, 99, 100, 97, 92, 94, 95, 93,0], [0,96, 87, 77, 78, 76, 71, 70, 73, 80, 79, 81, 85, 82, 83, 84, 86, 88, 91, 90, 89, 4, 3, 7, 75, 5,0], [0,29, 30, 27, 24, 22, 20, 21, 8,0], [67, 62, 74, 72, 61, 64, 69, 66, 63,0], [0,68, 65, 49, 55, 57, 54, 53, 56, 58, 60, 59, 40, 44, 46, 45, 51, 50, 52, 47, 43, 42, 41, 48,0], [0,6, 34, 36, 32, 33, 31, 35, 37, 38, 39, 28, 26, 23, 18, 19, 16, 14, 12, 15, 17, 13, 25, 9, 11, 10,0], []]
-        # routes = [
-        #     [0, 69, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 43, 42, 41, 48, 0], #bad
-        #     [0, 20, 69, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 42, 41, 48, 0], #bad
-        #     [0, 69, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 43, 42, 41, 0], #bad
-        #     [0, 67, 63, 62, 74, 72, 61, 64, 66, 69, 47, 0],  #good
-        #     [0, 67, 63, 62, 74, 72, 61, 64, 66, 69, 48, 0] #good
-        # ]
-        # routes = [[0,69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 48,0]]
-        # routes = [[0,68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 43, 42, 41, 48,0]]
+        # routes = [[0, 81, 78, 76, 71, 70, 73, 77, 79, 80, 0], [0, 57, 55, 54, 53, 56, 58, 60, 59, 0], [0, 98, 96, 95, 94, 92, 93, 97, 100, 99, 0], [0, 90, 87, 86, 83, 82, 84, 85, 88, 89, 91, 0], [0, 13, 17, 18, 19, 15, 16, 14, 12, 10, 0], [0, 32, 33, 31, 35, 37, 38, 39, 36, 34, 0], [0, 67, 65, 63, 62, 74, 72, 61, 64, 68, 66, 69, 0], [0, 43, 42, 41, 40, 44, 46, 45, 48, 51, 50, 52, 49, 47, 0], [0, 20, 24, 25, 27, 29, 30, 28, 26, 23, 22, 21, 0], [0, 5, 3, 7, 8, 11, 9, 6, 4, 2, 1, 75, 0]]
+        # routes = [[0, 5, 0]]
+        #         # add depot to the routes
+        # for i in range(len(routes)):
+        #     if len(routes[i]) > 2:  # Only sort if there are at least three nodes
+        #         routes[i][1:-1] = sorted(routes[i][1:-1], key=lambda node: self.problem.time_intervals[str(node)][0])
 
-
-
-        #good routes
-        # routes = [[0, 67, 62, 74, 72, 61, 64, 66, 48, 0], [0, 20, 22, 21, 8, 0], [0, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 51, 42, 41, 48, 0], [0, 67, 62, 24, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 42, 41, 48, 0], [0, 20, 22, 21, 0], [0, 67, 62, 74, 72, 61, 64, 66, 48, 0], [0, 67, 63, 62, 74, 72, 61, 64, 66, 69, 48, 0], [0, 67, 62, 74, 72, 61, 64, 66, 48, 0], [0, 69, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 51, 42, 41, 48, 0], [0, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 51, 42, 41, 0], [0, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 51, 42, 41, 48, 0], [0, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 51, 42, 41, 48, 0], [0, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 51, 42, 41, 48, 0], [0, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 51, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 48, 0], [0, 20, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 42, 41, 48, 0], [0, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 0], [0, 20, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 47, 43, 0], [0, 67, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 48, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 52, 42, 41, 48, 0], [0, 20, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 42, 41, 48, 0], [0, 66, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 0], [0, 20, 67, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 59, 58, 60, 57, 40, 44, 46, 45, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 43, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 48, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 41, 52, 0], [0, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 43, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 52, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 52, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 52, 42, 41, 0], [0, 63, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 52, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 41, 52, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 42, 41, 52, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 42, 41, 52, 0], [0, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 52, 42, 41, 0], [0, 20, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 42, 41, 52, 0], [0, 20, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 52, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 52, 42, 41, 0], [0, 20, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 43, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 43, 42, 41, 0], [0, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 43, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 42, 41, 52, 48, 0], [0, 20, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 52, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 52, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 43, 41, 0]]
-        
-        #bad routes
-        # routes = [[0, 20, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 42, 41, 48, 0], [0, 20, 68, 65, 49, 55, 59, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 42, 41, 48, 0], [0, 69, 68, 65, 49, 55, 54, 59, 53, 56, 58, 60, 57, 40, 44, 46, 45, 42, 41, 0], [0, 69, 68, 65, 49, 55, 54, 59, 53, 56, 58, 60, 57, 40, 44, 46, 45, 42, 41, 0], [0, 96, 91, 88, 84, 86, 83, 82, 85, 76, 71, 70, 73, 80, 79, 81, 78, 77, 87, 90, 0], [0, 96, 91, 88, 84, 86, 83, 82, 85, 76, 71, 70, 73, 80, 79, 81, 78, 77, 87, 90, 0], [0, 96, 91, 88, 84, 86, 83, 82, 85, 76, 71, 70, 73, 80, 79, 81, 78, 77, 87, 90, 0], [0, 96, 91, 88, 84, 86, 83, 82, 85, 76, 71, 70, 73, 80, 79, 81, 78, 77, 87, 90, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 48, 0], [0, 20, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 47, 43, 0], [0, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 43, 42, 41, 0], [0, 67, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 48, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 48, 0], [0, 24, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 47, 43, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 48, 0], [0, 5, 2, 1, 7, 98, 99, 100, 97, 92, 94, 95, 3, 4, 89, 8, 0], [0, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 42, 41, 48, 0], [0, 20, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 59, 58, 60, 57, 40, 44, 46, 45, 42, 41, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 43, 42, 41, 0], [0, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 42, 41, 52, 0], [0, 20, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 42, 41, 48, 0], [0, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 43, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 42, 52, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 52, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 42, 41, 52, 0], [0, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 42, 41, 52, 0], [0, 20, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 42, 41, 48, 0], [0, 20, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 42, 41, 48, 0], [0, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 42, 52, 0], [0, 20, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 41, 48, 0]]
+        # routes = [[0, 22, 24, 27, 30, 29, 6, 34, 32, 33, 31, 35, 37, 38, 39, 36, 28, 26, 23, 18, 19, 16, 14, 12, 15, 17, 13, 25, 9, 11, 10, 8, 21, 20, 0], [0, 93, 1, 98, 95, 99, 100, 97, 94, 92, 7, 2, 5, 75, 4, 3, 89, 91, 88, 84, 86, 83, 82, 85, 76, 71, 70, 73, 80, 79, 81, 78, 77, 96, 87, 90, 0], [0, 63, 62, 74, 72, 61, 64, 66, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 47, 43, 42, 41, 50, 52, 48, 67, 0], [], [], [], []]
 
         return VRPSolution(problem, None, None, routes)
