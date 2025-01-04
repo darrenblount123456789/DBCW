@@ -534,7 +534,7 @@ class TabuSolver(VRPSolver):
                                 swap2 = new_neighbor[i][idxe]
                                 new_neighbor[i][idxd] = swap2
                                 new_neighbor[i][idxe] = swap1
-
+                                n = Neighbor(new_neighbor, swap1, i, swap2, i)
                                 if vehicle_weights[i] <= capacities[i] and not self.check_time(new_neighbor[i]):
                                     # if not self.check_time(new_neighbor[i]): #respects time windows
                                     #     lastSolution = (" 1 route, cap, time",new_neighbor[i],self.calculate_route_cost(new_neighbor[i], costs, sources) > capacities[i], self.check_time(new_neighbor[i]))
@@ -617,21 +617,21 @@ class TabuSolver(VRPSolver):
                                             cost = self.calculate_route_cost(new_route, costs, sources)
                                             if cost < best_found_cost:
                                                 best_found_cost, best_found_spot = cost, k
-                                        else:
-                                            # print(f"Time constraint violated for inserting {d} into position {k} of cluster {j}")
-                                            # Time constraint violated; add to infeasible neighbors
-                                            new_neighbor = copy.deepcopy(clusters)
-                                            new_neighbor[i].remove(d)
-                                            new_neighbor[j] = clusters[j][:k] + [d] + clusters[j][k:]
-                                            n = Neighbor(new_neighbor, d, i)
-                                            lastSolution = ("6 j i route, time", new_neighbor[j], self.check_time(new_neighbor[j]), new_neighbor[i], self.check_time(new_neighbor[i]))
-                                            inf_neighbors.append(n)
+                                        #else:
+                                        #    # print(f"Time constraint violated for inserting {d} into position {k} of cluster {j}")
+                                        #    # Time constraint violated; add to infeasible neighbors
+                                        #    new_neighbor = copy.deepcopy(clusters)
+                                        #    new_neighbor[i].remove(d)
+                                        #    new_neighbor[j] = clusters[j][:k] + [d] + clusters[j][k:]
+                                        #    n = Neighbor(new_neighbor, d, i)
+                                        #    lastSolution = ("6 j i route, time", new_neighbor[j], self.check_time(new_neighbor[j]), new_neighbor[i], self.check_time(new_neighbor[i]))
+                                        #    inf_neighbors.append(n)
 
                                     # If a feasible insertion point was found, add the neighbor
                                     if best_found_spot is not None:
                                         new_neighbor = copy.deepcopy(clusters)
                                         new_neighbor[i].remove(d)
-                                        new_neighbor[j] = clusters[j][:best_found_spot] + [d] + clusters[j][best_found_spot:]
+                                        new_neighbor[j] = new_neighbor[j][:best_found_spot] + [d] + new_neighbor[j][best_found_spot:]
                                         n = Neighbor(new_neighbor, d, i)
                                         lastSolution = ("7 j i route, cap, time", new_neighbor[j], self.check_time(new_neighbor[j]), new_neighbor[i], self.check_time(new_neighbor[i]))
                                         neighbors.append(n)
@@ -702,11 +702,14 @@ class TabuSolver(VRPSolver):
                 current_best_cost = self.max_dist
                 best_amount = sum(capacities)
                 best_inf_amount = sum(capacities)
+                best_times = vehicles
+                best_inf_times = vehicles
                 testVar = True
 
                 # Check feasible candidates
                 for n in neighbors:
                     current_infeasible_amount = 0
+                    current_infeasible_times = 0
                     current_weights = list()
                     current_times = list()
                     
@@ -716,12 +719,12 @@ class TabuSolver(VRPSolver):
                         current_times.append(0)
                         for dest in n.clusters[i]:
                             current_weights[i] += self.problem.weights[dest]
-                        current_times[i] = self.totalTime(n.clusters[i])
-                        if current_weights[i] + current_times[i] > capacities[i] + DEPOT_RETURN_TIME:
-                            current_infeasible_amount += current_weights[i] + current_times[i] - capacities[i] - DEPOT_RETURN_TIME
-
+                        current_times[i] = self.check_time(n.clusters[i])
+                        if current_weights[i] > capacities[i]:
+                            current_infeasible_amount += current_weights[i] - capacities[i]
+                        current_infeasible_times = sum(current_times)
                     # Consider only if it reduces infeasibility or is feasible
-                    if current_infeasible_amount <= best_amount:
+                    if current_infeasible_amount <= best_amount and current_infeasible_times <= best_times:
                         cost = self.calculate_neighbor_cost(problem, n.clusters)
                         if cost < current_best_cost:
                             testVar = False
@@ -733,6 +736,7 @@ class TabuSolver(VRPSolver):
                             selected_neighbor = n
                             selected_neighbor_cost = cost
                             best_amount = current_infeasible_amount
+                            best_times = current_infeasible_times
 
                 # Additional logging if no improvement
                 # if testVar:
@@ -747,6 +751,7 @@ class TabuSolver(VRPSolver):
                 #find best infeasible candidate                            
                 for n in inf_neighbors:
                     inf_infeasible_amount = 0
+                    inf_infeasible_times = 0
                     current_weights = list()
                     current_times = list()
                     for i in range(vehicles):
@@ -754,17 +759,19 @@ class TabuSolver(VRPSolver):
                         current_times.append(0)
                         for dest in n.clusters[i]:
                             current_weights[i] += self.problem.weights[dest]
-                        current_times[i] = self.totalTime(n.clusters[i])
-                        if current_weights[i] + current_times[i] > capacities[i] + DEPOT_RETURN_TIME:
-                            inf_infeasible_amount += current_weights[i] + current_times[i] - capacities[i] - DEPOT_RETURN_TIME
-                    if inf_infeasible_amount <= best_inf_amount and self.is_tabu(tabu, n) is False:                
+                        current_times[i] = self.check_time(n.clusters[i])
+                        if current_weights[i] > capacities[i]:
+                            inf_infeasible_amount += current_weights[i] - capacities[i]
+                        inf_infeasible_times = sum(current_times)
+                    if inf_infeasible_amount <= best_inf_amount and inf_infeasible_times <= best_inf_times and self.is_tabu(tabu, n) is False:                
                         #keep track of best non-tabu neighbor
                         selected_inf_neighbor = n
-                        selected_inf_neighbor_cost = cost
+                        selected_inf_neighbor_cost = self.calculate_neighbor_cost(problem, n.clusters)
                         best_inf_amount = inf_infeasible_amount
+                        best_inf_times = inf_infeasible_times
 
                 #pick the best neighbor
-                if best_inf_amount < best_amount:
+                if best_inf_amount < best_amount and best_inf_times < best_times:
                     selected_neighbor = selected_inf_neighbor
                     selected_neighbor_cost = selected_inf_neighbor_cost
             
@@ -776,9 +783,9 @@ class TabuSolver(VRPSolver):
                 current_best_feasible = True
                 for i in range(vehicles):
                     vehicle_weights.append(0)
-                    for dest in clusters[i]:
+                    for dest in current_best_neighbor.clusters[i]:
                         vehicle_weights[i] += self.problem.weights[dest]
-                    if vehicle_weights[i] > capacities[i] or self.check_time(clusters[i]): #if capacity is violated or time is violated
+                    if vehicle_weights[i] > capacities[i] or self.check_time(current_best_neighbor.clusters[i]): #if capacity is violated or time is violated
                         current_best_feasible = False
                         break
                 #feasible, so lets use it
@@ -814,7 +821,7 @@ class TabuSolver(VRPSolver):
                 # if current_best_cost == self.max_dist:
                     
 
-                print(lastSolution)                 
+                #print(lastSolution)                 
                 print(f"Neighbors {len(neighbors)} Inf Neighbors {len(inf_neighbors)}")
                 print('counter', counter, 'cbc', current_best_cost, 'snc', selected_neighbor_cost, 'move', current_best_move, "feasible", feasible)
                 if intensification_counter == 2: #diversification
@@ -824,7 +831,8 @@ class TabuSolver(VRPSolver):
                     diversification = True
                     intensification_counter = 1   
                     diversification_counter += 1
-                    neighborhood = self.update_neighborhood(dests, costs, weights, vehicles * 2)
+                    neighborhood_range = random.randint(vehicles * 2, vehicles * 4)
+                    neighborhood = self.update_neighborhood(dests, costs, weights, neighborhood_range)
                 elif intensification_counter == 1 and diversification_counter % 10 == 0: #intensification
                     print('intensification', counter)
                     print('div counter ', diversification_counter)
@@ -842,39 +850,110 @@ class TabuSolver(VRPSolver):
                     last_threshold = random.randint(int(0.6 * N), int(1.1 * N))
                     diversification = False
                     intensification_counter +=1
-                    neighborhood = self.update_neighborhood(dests, costs, weights, vehicles)     
+                    neighborhood = self.update_neighborhood(dests, costs, weights, vehicles)  
 
-            # 17. Sparse Quantum Resequencing
-            # if counter - counter_of_last_best == 2000:      
-            #     print('Quantum Go', counter)              
-            #     clusters = copy.deepcopy(best_solution) 
-            #     routes = list()
-            #     for cluster in clusters:
-            #         if len(cluster) > 1:
-            #             found = False
-            #             for rte in optimized_routes: #check if we have already sequenced this route
-            #                 if self.check_elements_match(cluster, rte):
-            #                     route = rte
-            #                     found = True
-            #             if found == False:
-            #                 new_problem = VRPProblem(sources, costs, [capacities[0]], cluster, weights, time_intervals, services, first_source = True, last_source = True)
-                            solver = FullQuboSolver(new_problem)
-            #                 print('0 =', cluster)
-            #                 route = solver.solve(only_one_const, order_const, solver_type = solver_type).solution[0]                                
-            #                 del route[0]
-            #                 del route[-1]
-            #                 print('1 =', route)
-            #                 optimized_routes.append(copy.deepcopy(route))
-            #         else:
-            #             route = cluster
-            #         routes.append(route)
-            #     clusters = routes
-            #     cost = self.calculate_neighbor_cost(problem, routes)
-            #     if cost < best_cost:
-            #         best_solution = copy.deepcopy(clusters)
-            #         best_cost = cost
-            #         counter_of_last_best = counter
-            #         print('quantum found total_cost =', best_cost)
+
+            #17 Sparse Quantum Resequencing
+            from dimod import ConstrainedQuadraticModel, Binary
+            from dwave.system import LeapHybridCQMSampler
+        
+            # Quantum Resequencing with CQM
+            if counter - counter_of_last_best == 2000:
+                print('Quantum Go', counter)
+
+                clusters = copy.deepcopy(best_solution)
+                routes = list()
+
+                for cluster in clusters:
+                    if len(cluster) > 1:
+                        found = False
+                        for rte in optimized_routes:  # Check if we already sequenced this route
+                            if self.check_elements_match(cluster, rte):
+                                route = rte
+                                found = True
+
+                        if not found:
+                            # Create a CQM problem for this cluster
+                            cqm = ConstrainedQuadraticModel()
+
+                            # Include the depot in the cluster
+                            cluster_with_depot = [0] + cluster + [0]
+
+                            # Binary variables for route selection
+                            variables = {node: Binary(f'v{node}') for node in cluster_with_depot}
+
+                            # Objective: Minimize travel cost
+                            objective = sum(
+                                costs[i][j] * variables[i] * variables[j]
+                                for i, j in itertools.combinations(cluster_with_depot, 2)
+                            )
+                            cqm.set_objective(objective)
+
+                            # Constraints:
+                            # 1. Each node is visited exactly once
+                            for node in cluster:
+                                cqm.add_constraint(
+                                    sum(variables[i] for i in cluster_with_depot if i == node) == 1,
+                                    label=f'visit_{node}'
+                                )
+
+                            # 2. Start and end at the depot
+                            cqm.add_constraint(variables[0] == 1, label='depot_start')
+                            cqm.add_constraint(variables[0] == 1, label='depot_end')
+
+                            # 3. Capacity constraint
+                            cqm.add_constraint(
+                                sum(weights[node] * variables[node] for node in cluster) <= capacities[0],
+                                label='capacity_constraint'
+                            )
+
+                            # 4. Time window constraints
+                            for i, node in enumerate(cluster_with_depot):
+                                ready_time, due_time = time_intervals[str(node)]
+                                service_time = services[0]
+
+                                travel_time_expr = sum(
+                                    costs[int(prev)][int(node)] * variables[prev]
+                                    for prev in cluster_with_depot if prev != node
+                                )
+
+                                if i == 0:  # Start of the route
+                                    cqm.add_constraint(travel_time_expr + service_time >= ready_time, label=f'time_ready_start_{node}')
+                                    cqm.add_constraint(travel_time_expr + service_time <= due_time, label=f'time_due_start_{node}')
+                                elif i == len(cluster_with_depot) - 1:  # End of the route
+                                    cqm.add_constraint(travel_time_expr + service_time >= ready_time, label=f'time_ready_end_{node}')
+                                    cqm.add_constraint(travel_time_expr + service_time <= due_time, label=f'time_due_end_{node}')
+                                else:  # Intermediate nodes
+                                    cqm.add_constraint(travel_time_expr + service_time >= ready_time, label=f'time_ready_{node}')
+                                    cqm.add_constraint(travel_time_expr + service_time <= due_time, label=f'time_due_{node}')
+
+                            # Solve the CQM using LeapHybridCQMSampler
+                            sampler = LeapHybridCQMSampler()
+                            solution = sampler.sample_cqm(cqm).first
+
+                            # Extract the optimized route
+                            route = [node for node in cluster if solution.sample.get(f'v{node}', 0) == 1]
+                            optimized_routes.append(copy.deepcopy(route))
+                            print('Optimized route:', route)
+                        else:
+                            route = cluster
+                    else:
+                        route = cluster
+
+                    routes.append(route)
+
+                # Update the solution and cost
+                clusters = routes
+                cost = self.calculate_neighbor_cost(problem, routes)
+                if cost < best_cost:
+                    best_solution = copy.deepcopy(clusters)
+                    best_cost = cost
+                    counter_of_last_best = counter
+                    print('Quantum found total_cost =', best_cost)
+
+
+
+
 
             # 18. update tabu list
             for move in tabu:
@@ -884,7 +963,7 @@ class TabuSolver(VRPSolver):
 
             # 19. update iterator and loop back
             counter += 1
-            if counter - counter_of_last_best == 100000: #stop if its been XXXX moves since we found a new best
+            if counter - counter_of_last_best == N * 100: #stop if its been XXXX moves since we found a new best
                 # print(f'good: {goodArray}')
                 # print(f'bad: {badArray}')
                 print('Best solution was found on counter =', counter_of_last_best)
@@ -1260,5 +1339,13 @@ class ClarkWright(VRPSolver):
         #         routes[i][1:-1] = sorted(routes[i][1:-1], key=lambda node: self.problem.time_intervals[str(node)][0])
 
         # routes = [[0, 22, 24, 27, 30, 29, 6, 34, 32, 33, 31, 35, 37, 38, 39, 36, 28, 26, 23, 18, 19, 16, 14, 12, 15, 17, 13, 25, 9, 11, 10, 8, 21, 20, 0], [0, 93, 1, 98, 95, 99, 100, 97, 94, 92, 7, 2, 5, 75, 4, 3, 89, 91, 88, 84, 86, 83, 82, 85, 76, 71, 70, 73, 80, 79, 81, 78, 77, 96, 87, 90, 0], [0, 63, 62, 74, 72, 61, 64, 66, 69, 68, 65, 49, 55, 54, 53, 56, 58, 60, 59, 57, 40, 44, 46, 45, 51, 47, 43, 42, 41, 50, 52, 48, 67, 0], [], [], [], []]
+
+        # routes = [[0, 93, 1, 94, 95, 98, 99, 100, 97, 92, 7, 3, 4, 91, 89, 2, 75, 5, 0],
+        #         [0, 63, 96, 85, 83, 82, 88, 84, 86, 76, 71, 70, 73, 80, 79, 81, 78, 77, 87, 90, 0],
+        #         [0, 20, 22, 24, 27, 21, 0],
+        #         [0, 67, 62, 74, 72, 61, 64, 66, 69, 0],
+        #         [0, 59, 50, 52, 68, 65, 49, 55, 54, 53, 56, 58, 60, 57, 40, 44, 46, 45, 51, 47, 43, 42, 41, 48, 0],
+        #         [0, 31, 37, 34, 26, 30, 29, 6, 32, 33, 35, 38, 39, 36, 28, 23, 18, 19, 16, 14, 12, 15, 17, 13, 25, 9, 11, 10, 8, 0]]
+
 
         return VRPSolution(problem, None, None, routes)
